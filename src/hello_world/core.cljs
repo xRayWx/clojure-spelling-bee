@@ -7,22 +7,7 @@
 ;; which can sometimes be useful.
 (enable-console-print!)
 
-;;; Old Skool:  a basic button attached to a counter,
-;;; with JS actions.
-
-(defn simple-button []
-  [:div
-   [:center
-    [:h1 "Simple button example"]
-    [:input {:type :button :class :button :value "Push me!"}]
-    [:div#the-text "Now what."]]])
-
-;; We can manipulate our DOM in real time remotely: watch this!
-#_
-(-> (gdom/getElement "the-text")
-    (gdom/setTextContent "Hello"))
-
-;; So we can write a function to change the text:
+;;; Slightly more modern:  event listeners
 
 (defn set-text [id text]
   (-> (gdom/getElement id)
@@ -37,29 +22,29 @@
   (let [old (get-value id)]
    (set-text id (inc old))))
 
-#_
-(increment-field "the-text")
+(defn simple-button []
+  [:div
+   [:center
+    [:h1 "Simple button example"]
+    [:input {:type :button :class :button :value "Push me!"}]
+    [:div#the-text 0]]])
 
-#_
-(set-text "the-text" 7)
+(js/addEventListener "click" #(increment-field "the-text"))
 
-;; ok - now we can hook this all up to the button:
+;; This somewhat decouples the presentation from the "action",
+;; but there is still no great place to store the state (currently
+;; stored in the text div itself!)
 
-(comment
+;; Also, the listeners add up and are not named, so if we reload this
+;; we now increment by multiple values.  Hard to track bugs.  Can do
 
-  (defn simple-button []
-    [:div
-     [:center
-      [:h1 "Simple button example"]
-      [:input {:type :button :class :button :value "Push me!"
-               :on-click #(increment-field "the-text")}]
-      [:div#the-text 0]]]))
+(defonce the-incrementer
+  (js/addEventListener "click" #(increment-field "the-text")))
 
-;; What a mess.  :-(
-
-
+;; But it still more or less sucks.
 
 
+
 ;;;; Mounting boilerplate below.
 (defn mount [el]
   (reagent/render-component [simple-button] el))
