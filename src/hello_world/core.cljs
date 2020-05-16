@@ -3,36 +3,69 @@
    [goog.dom :as gdom]
    [reagent.core :as reagent :refer [atom]]))
 
-
 ;; This command will cause our printlns to also show up in the console's log,
 ;; which can sometimes be useful.
 (enable-console-print!)
 
+;;; Old Skool:  a basic button attached to a counter,
+;;; with JS actions.
 
-(println "This text is printed from src/hello_world/core.cljs. Go ahead and edit it and see reloading in action.")
+(defn simple-button []
+  [:div
+   [:center
+    [:h1 "Simple button example"]
+    [:input {:type :button :class :button :value "Push me!"}]
+    [:div#the-text "Now what."]]])
+
+;; We can manipulate our DOM in real time remotely: watch this!
+#_
+(-> (gdom/getElement "the-text")
+    (gdom/setTextContent "Hello"))
+
+;; So we can write a function to change the text:
+
+(defn set-text [id text]
+  (-> (gdom/getElement id)
+      (gdom/setTextContent text)))
+
+(defn get-value [id]
+  (-> (gdom/getElement id)
+      (gdom/getTextContent)
+      (js/parseInt)))
+
+(defn increment-field [id]
+  (let [old (get-value id)]
+   (set-text id (inc old))))
+
+#_
+(increment-field "the-text")
+
+#_
+(set-text "the-text" 7)
+
+;; ok - now we can hook this all up to the button:
+
+(comment
+
+  (defn simple-button []
+    [:div
+     [:center
+      [:h1 "Simple button example"]
+      [:input {:type :button :class :button :value "Push me!"
+               :on-click #(increment-field "the-text")}]
+      [:div#the-text 0]]]))
+
+;; What a mess.  :-(
 
 
-(defn multiply [a b] (* a b))
 
-
-
-;; define your app data so that it doesn't get over-written on reload
-(defonce app-state (atom {:text "Hello class!"}))
+
+;;;; Mounting boilerplate below.
+(defn mount [el]
+  (reagent/render-component [simple-button] el))
 
 (defn get-app-element []
   (gdom/getElement "app"))
-
-(defn hello-world []
-  [:div
-
-   [:h1 (:text @app-state)]
-   [:h3 "To infinity, and beyond! "(/ 1 0)]
-   [:h3 "We're not in Kansas anymore: (+ 1 nil) " (+ 1 nil) " should be a type error..."]
-   [:p "Go watch this talk: " [:a {:href  "https://www.destroyallsoftware.com/talks/wat"} "Wat!?"]]
-   [:h3 "Edit this in src/hello_world/core.cljs and WATCH IT CHANGE!"]])
-
-(defn mount [el]
-  (reagent/render-component [hello-world] el))
 
 (defn mount-app-element []
   (when-let [el (get-app-element)]
