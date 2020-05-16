@@ -7,41 +7,44 @@
 ;; which can sometimes be useful.
 (enable-console-print!)
 
-;;; Slightly more modern:  event listeners
+;;; The React framework
+;;; (and it's clojurescript friend: Reagent)
 
-(defn set-text [id text]
-  (-> (gdom/getElement id)
-      (gdom/setTextContent text)))
 
-(defn get-value [id]
-  (-> (gdom/getElement id)
-      (gdom/getTextContent)
-      (js/parseInt)))
+;; Let us declare our state globally:
+(defonce the-counter (atom 0))
 
-(defn increment-field [id]
-  (let [old (get-value id)]
-   (set-text id (inc old))))
 
+;; This function, in reagent speak, can act as a COMPONENT.
 (defn simple-button []
   [:div
    [:center
     [:h1 "Simple button example"]
     [:input {:type :button :class :button :value "Push me!"}]
-    [:div#the-text 0]]])
+    [:div#the-text @the-counter]]])
 
-(js/addEventListener "click" #(increment-field "the-text"))
+;; Components have a very interesting property; they form a VIRTUAL DOM
+;; and the React library maintains consistency between the virtual DOM
+;; and the real DOM.  If the virtual dom is modified, the browser follows:
+;; to wit:
 
-;; This somewhat decouples the presentation from the "action",
-;; but there is still no great place to store the state (currently
-;; stored in the text div itself!)
+#_
+(swap! the-counter inc)
 
-;; Also, the listeners add up and are not named, so if we reload this
-;; we now increment by multiple values.  Hard to track bugs.  Can do
 
-(defonce the-incrementer
-  (js/addEventListener "click" #(increment-field "the-text")))
+;; This is the basis of the reactive framework.
 
-;; But it still more or less sucks.
+#_
+(defn simple-button []
+  [:div
+   [:center
+    [:h1 "Simple button example"]
+    [:input {:type :button :class :button :value "Push me!"
+             :on-click #(swap! the-counter inc)}]
+    [:div#the-text @the-counter]]])
+
+;; OK - now we need a way to abstract away the "what" of the
+;; button push.  Remember core.async?
 
 
 
