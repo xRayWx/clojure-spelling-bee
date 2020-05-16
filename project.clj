@@ -8,6 +8,7 @@
 
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/clojurescript "1.10.520"]
+                 [org.clojure/core.async "1.2.603"]
                  [reagent "0.8.1"]]
 
   :source-paths ["src"]
