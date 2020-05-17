@@ -10,6 +10,16 @@
 ;;; Old Skool:  a basic button attached to a counter,
 ;;; with JS actions.
 
+;; We can talk javascript directly:
+#_
+(js/alert "Hello!")
+
+
+
+;;; OK, enough javascript for now.
+
+
+
 (defn simple-button []
   [:div
    [:center
@@ -82,3 +92,36 @@
   ;; your application
   ;; (swap! app-state update-in [:__figwheel_counter] inc)
 )
+
+
+
+
+;; Interop with javascript is similar to clojure to java:
+
+
+(. js/document getElementById "app")
+
+;; JS makes a distinction between calling functions and accessing properties;
+
+(.-innerText ; note the .-
+ (. js/document getElementById "app"))
+
+;; And we have our .. macro again...
+(.. js/document (getElementById "app") -innerText)
+
+;; We can change properties with set!
+(set! (.. js/document (getElementById "the-text") -innerText)
+      "And then this")
+
+
+;; The functions clj->js and js->clj effect transformations
+;; between the two worlds
+(clj->js {:foo #{1 2 3}})
+
+;; But you still can't round trip.  :-(
+(js->clj #js {:foo #js [1 3 2]})
+
+
+;; The #js literal reader allows us to manipulate raw javascript objects and arrays.
+(set! (.. js/document -myFoo) #js {:foo 7})
+(set! (.. js/document -myBar) {:foo 7})
