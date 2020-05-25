@@ -10,7 +10,7 @@
                  [org.clojure/clojurescript "1.10.520"]
                  [org.clojure/core.async "1.2.603"]
                  [reagent "0.8.1"]
-
+                 [re-frame "1.0.0-rc1"]
                  [cljs-http "0.1.46"]
                  [compojure "1.6.1"]
                  [ring/ring-defaults "0.3.2"]
