@@ -10,58 +10,38 @@
 ;; which can sometimes be useful.
 (enable-console-print!)
 
-
-(def center-letter [\I])
-(def surrounding-letter [\L \K \Y \N \R \W])
-(def letters (concat center-letter surrounding-letter))
-(def word-list ["ILLY" "KILL" "WRINKLY" "WILL" "NINNY" "KINKILY" "KINKY" "LILY" "LINK" "KRILL"])
-
 ;;;; 1. Event Dispatch---------------------------------------------------------------------
 
 (defn dispatch-user-inputs [inputs]
-  (rf/dispatch [:spelling inputs]))
-
-(defn dispatch-characters-order [order]
-  (rf/dispatch [:shuffle order]))
-
-(defn dispatch-points [points]
-  (rf/dispatch [:add-points points]))
-
-(defn dispatch-message [message]
-  (rf/dispatch [:add-message message]))
-
-(defn dispatch-rank [rank]
-  (rf/dispatch [:update-rank rank]))
-
-(defn dispatch-words [word]
-  (rf/dispatch [:add-word word]))
+  (rf/dispatch [:handle-user-inputs inputs]))
 
 ;;;; 2. Event Handlers---------------------------------------------------------------------
 
+;; Revamped the initializer, took away local variables
 (rf/reg-event-db
  :initialize
- (fn [_ _]
+ (fn [db _]
    {:user-inputs ""
-    :characters-order letters
+    :characters-order [\I \L \K \Y \N \R \W]
     :points 0
     :message ""
     :rank "Beginner"
-    :user-words #{}}))
+    :user-words #{}
+    :center-letter \I
+    :surrounding-letter [\L \K \Y \N \R \W]
+    :word-list ["LILY" "ILLY" "WRINKLY" "WILL" "NINNY" "KINKILY" "KINKY" "LINK" "KRILL" "KILL"]}))
 
 (rf/reg-event-db
- :spelling
+ :handle-user-inputs
  (fn [db [_ new-user-inputs]]
    (assoc db :user-inputs new-user-inputs)))
 
 (rf/reg-event-db
  :shuffle
  (fn [db [_ new-character-spots]]
-   (assoc db :characters-order new-character-spots)))
-
-(rf/reg-event-db
- :add-points
- (fn [db [_ new-points]]
-   (assoc db :points new-points)))
+   (let [new-surroundings (shuffle (:surrounding-letter db))
+         new-order (concat (:center-letter db) new-surroundings)]
+     (assoc db :characters-order new-order))))
 
 (rf/reg-event-db
  :add-message
@@ -69,14 +49,125 @@
    (assoc db :message new-message)))
 
 (rf/reg-event-db
- :update-rank
- (fn [db [_ new-rank]]
-   (assoc db :rank new-rank)))
+ :clear-user-inputs
+ (fn [db _]
+   (assoc db :user-inputs "")))
+
+(defn pangrams? [word]
+  ;; Display pangrams, otherwise, normal message
+  (= 7 (count (frequencies word))))
+
+(defn calculate-points [word]
+  ;; Calculate new points
+  (if (= 4 (count word))
+    1
+    (do
+      (if (pangrams? word)
+        (+ (count word) 7)
+        (count word)))))
 
 (rf/reg-event-db
- :add-word
- (fn [db [_ new-word]]
-   (assoc db :user-words new-word)))
+ :update-points
+ (fn [db [_ points]]
+   (let [current-points (:points db)]
+     (assoc db :points (+ points current-points)))))
+
+;; Revamped compute rank(update rank) logic
+(defn compute-rank [points]
+  ;; Returns a rank
+  (cond
+    (and (>= points 1) (< points 3)) "Good Start"
+    (= points 3) "Moving up"
+    (and (>= points 4) (< points 8)) "Good"
+    (and (>= points 8) (< points 13)) "Nice"
+    (and (>= points 13) (< points 21)) "Great"
+    (and (>= points 21) (< points 26)) "Amazing"
+    :else "Genius"))
+
+(rf/reg-event-db
+ :update-rank
+ (fn [db _]
+   (assoc db :rank (compute-rank (:points db)))))
+
+(defn too-short? [word]
+  ;; Display too short, otherwise, proceed to the next evaluation
+ (< (count word) 4))
+
+(defn bad-letters? [word letters]
+  ;; Display bad letters, otherwise, proceed to the next evaluatiln
+  (contains? (into #{} (for [w word]
+                         (some #{w} letters))) nil))
+
+(defn missing-center? [word center-letter]
+  ;; Display missing center letter, otherwise, proceed to the next evaluation
+  (not (str/includes? word center-letter)))
+
+(defn in-word-list? [word word-list]
+  ;; Display not in word list, otherwise, proceed to the next evaluation
+  (nil? (some #{word} word-list)))
+
+(defn found? [word user-words]
+  ;; Display already found, otherwise, proceed to the next evaluation
+  (not= nil (some #{word} user-words)))
+
+;; Revamped the handle-letter(validate letter) logic
+(rf/reg-event-fx
+ :handle-word
+ (fn [{:keys [db]} [_ input]]
+   (let [word (str/upper-case input)]
+     (when-not (= "" word)
+       (do
+         (rf/dispatch [:clear-user-inputs])
+         (cond
+           (too-short? word) {:dispatch [:add-message "Too Short"]}
+
+           (bad-letters? word (:characters-order db)) {:dispatch [:add-message "Bad letters"]}
+
+           (missing-center? word (:center-letter db)) {:dispatch [:add-message "Missing center letter"]}
+           
+           (in-word-list? word (:word-list db)) {:dispatch [:add-message "Not in word list"]}
+           
+           (not= nil (some #{word} (:user-words db))) {:dispatch [:add-message "Already found"]}
+           
+           :else
+           (let [current-points (calculate-points word)
+                 message (if (pangrams? word) "Pangrams! +" "Good! +")]
+             (rf/dispatch [:update-points current-points])
+             (rf/dispatch [:update-rank])
+             {:db (assoc db :user-words (conj (:user-words db) word))
+              :dispatch [:add-message (str message current-points)]})))))))
+
+(defn handle-keypress [key]
+  (if (= 13 key) (rf/dispatch [:handle-word @(rf/subscribe [:user-inputs])])))
+
+(defn clicked-character-button [char]
+  (let [current-inputs @(rf/subscribe [:user-inputs])
+        new-inputs (str current-inputs char)]
+    (dispatch-user-inputs new-inputs)))
+
+(defn drop-last-character []
+  (let [current-inputs @(rf/subscribe [:user-inputs])
+        new-inputs (apply str (drop-last current-inputs))]
+    (dispatch-user-inputs new-inputs)))
+
+;; Revamped show-characters
+(defn create-character-button [character button-class]
+  ^{:key character} [:input {:type "button"
+                             :class button-class
+                             :value character
+                             :on-click #(clicked-character-button character)}])
+
+(defn show-character-buttons [characters]
+  [:div
+   [:div
+    (for [c (subvec (vec characters) 1 4)]
+      (create-character-button c "letterButton"))]
+   [:div
+    (for [c (subvec (vec characters) 0 1)]
+      (create-character-button c "centerButton letterButton"))]
+   [:div
+    (for [c (subvec (vec characters) 4)]
+      (create-character-button c "letterButton"))]])
 
 ;;;; 4. Subscription Handlers---------------------------------------------------------------------
 
@@ -110,90 +201,10 @@
  (fn [db _]
    (:user-words db)))
 
-;;;; Helper Fuctions---------------------------------------------------------------------
-
-(defn too-short? [word]
-  ;; Display too short, otherwise, proceed to the next evaluation
- (< (count word) 4))
-
-(defn bad-letters? [word]
-  ;; Display bad letters, otherwise, proceed to the next evaluatiln
-  (contains? (into #{} (for [w word]
-                         (some #{w} letters))) nil))
-
-(defn missing-center? [word]
-  ;; Display missing center letter, otherwise, proceed to the next evaluation
-  (not (str/includes? word "I")))
-
-(defn in-word-list? [word]
-  ;; Display not in word list, otherwise, proceed to the next evaluation
-  (nil? (some #{word} word-list)))
-
-(defn do-shuffle []
-  (let [new-surroundings (shuffle surrounding-letter)
-        new-order (concat center-letter new-surroundings)]
-    (dispatch-characters-order new-order)))
-
-(defn calculate-points [word points]
-  ;; Calculate new points
-  (if (= 4  (count word))
-    (+ 1 points)
-    (+ (count word) points)))
-
-(defn update-rank [points]
-  (cond
-    (and (>= points 1) (< points 3)) (dispatch-rank "Good Start")
-    (= points 3) (dispatch-rank "Moving up")
-    (and (>= points 4) (< points 8)) (dispatch-rank "Good")
-    (and (>= points 8) (< points 13)) (dispatch-rank "Nice")
-    (and (>= points 13) (< points 21)) (dispatch-rank "Great")
-    (and (>= points 21) (< points 26)) (dispatch-rank "Amazing")
-    :else (dispatch-rank "Genius")))
-
-(defn pangrams? [word]
-  ;; Display pangrams, otherwise, normal message
-  (= 7 (count (frequencies word))))
-
-(defn validate-letter []
-  (let [new-word (str/upper-case @(rf/subscribe [:user-inputs]))]
-    (if (not= "" new-word)
-      (do
-        (dispatch-user-inputs "")
-        (cond
-          (too-short? new-word) (dispatch-message "Too short")
-          (bad-letters? new-word) (dispatch-message "Bad lettes")
-          (missing-center? new-word) (dispatch-message "Missing center letter")
-          (in-word-list? new-word) (dispatch-message "Not in word list")
-          :else 
-          (let [words @(rf/subscribe [:user-words])
-                new-words-list (conj words new-word)
-                points @(rf/subscribe [:points])
-                new-points (calculate-points new-word points)]
-            (do
-              (if (pangrams? new-word)
-                (dispatch-message (str "Pangrams! +" new-points))
-                (dispatch-message (str "Good! + " new-points)))
-              (update-rank new-points)
-              (dispatch-points new-points)
-              (dispatch-words new-words-list))))))))
-
-(defn hit-return? [key]
-  (if (= 13 key) (validate-letter)))
-
-(defn clicked-character-button [char]
-  (let [current-inputs @(rf/subscribe [:user-inputs])
-        new-inputs (str current-inputs char)]
-    (dispatch-user-inputs new-inputs)))
-
-(defn drop-last-character []
-  (let [current-inputs @(rf/subscribe [:user-inputs])
-        new-inputs (apply str (drop-last current-inputs))]
-    (dispatch-user-inputs new-inputs)))
-
 ;;;; 5. View Functions---------------------------------------------------------------------
 
-(defn show-message []
-  [:h3 @(rf/subscribe [:message])])
+(defn show-message [db-message]
+  [:h3 db-message])
 
 (defn user-input []
   [:input {:style {:text-transform "uppercase"}
@@ -202,30 +213,7 @@
            :placeholder "Start spelling!"
            :value @(rf/subscribe [:user-inputs])
            :on-change #(dispatch-user-inputs (-> % .-target .-value))
-           :on-key-press (fn [e] (hit-return? (.-charCode e)))}])
-
-(defn show-characters []
-  (let [characters @(rf/subscribe [:characters-order])]
-    [:div
-     [:div
-      (for [c (subvec (vec characters) 1 4)]
-        ^{:key c} [:input {:type "button"
-                           :class "letterButton"
-                           :value c
-                           :on-click #(clicked-character-button c)}])]
-     [:div
-      (for [c (subvec (vec characters) 0 1)]
-        ^{:key c} [:input {:type "button"
-                           :class "centerButton letterButton"
-                           :color "red"
-                           :value c
-                           :on-click #(clicked-character-button c)}])]
-     [:div
-      (for [c (subvec (vec characters) 4)]
-        ^{:key c} [:input {:type "button"
-                           :class "letterButton"
-                           :value c
-                           :on-click #(clicked-character-button c)}])]]))
+           :on-key-press (fn [e] (handle-keypress (.-charCode e)))}])
 
 (defn delete-button []
   [:input {:type "button"
@@ -237,26 +225,25 @@
   [:input {:type "button"
            :class "actionButton"
            :value "Shuffle"
-           :on-click #(do-shuffle)}])
+           :on-click #(rf/dispatch [:shuffle])}])
 
-(defn enter-button []
+(defn enter-button [db-user-inputs]
   [:input {:type "button"
            :class "actionButton"
            :value "Enter"
-           :on-click #(validate-letter)}])
+           :on-click #(rf/dispatch [:handle-word db-user-inputs])}])
 
-(defn show-points []
-  [:h3 @(rf/subscribe [:rank]) " " @(rf/subscribe [:points])])
+(defn show-rank-points [db-rank db-points]
+  [:h3 db-rank " " db-points])
 
-(defn slider []
-  (println "Points: " @(rf/subscribe [:points]))
+(defn show-slider [db-points]
   [:input {:type "range"
            :min 0
            :max 30
-           :value @(rf/subscribe [:points])}])
+           :value db-points}])
 
-(defn list-words []
-  (let [words (apply sorted-set @(rf/subscribe [:user-words]))]
+(defn list-words [db-user-words]
+  (let [words (apply sorted-set db-user-words)]
     [:div
      [:h3 "You have found " (count words) " words"
       [:ul {:style {:list-style-type "none"}}
@@ -265,18 +252,18 @@
 
 (defn spelling-bee []
   [:center>div
-   [:center>h1  "Spelling Bee"]
+   [:center>h1 "Spelling Bee"]
    [:div
-    [show-message]
+    [show-message @(rf/subscribe [:message])]
     [user-input]
-    [show-characters]]
+    [show-character-buttons @(rf/subscribe [:characters-order])]]
    [:div
     [delete-button]
     [shuffle-button]
-    [enter-button]
-    [show-points]
-    [slider]
-    [list-words]]])
+    [enter-button @(rf/subscribe [:user-inputs])]
+    [show-rank-points @(rf/subscribe [:rank]) @(rf/subscribe [:points])]
+    [show-slider @(rf/subscribe [:points])]
+    [list-words @(rf/subscribe [:user-words])]]])
 
 ;;;; Entry Point---------------------------------------------------------------------
 
